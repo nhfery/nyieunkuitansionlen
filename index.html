@@ -161,8 +161,8 @@ for(const k in THEMES)THEMES[k]=Object.assign({},BASE,THEMES[k]);
 const T=()=>THEMES[state.tema]||THEMES.biru;
 let state, isContoh=true, ttdImg=null;
 
-try{const s=JSON.parse(localStorage.getItem(KEY)||'null'); if(s){state=Object.assign({},KOSONG,s); isContoh=!!s._contoh;}}catch(e){}
-if(!state){state=Object.assign({},CONTOH); isContoh=true;}
+state=Object.assign({},KOSONG); isContoh=false;
+try{const s=JSON.parse(localStorage.getItem(KEY)||'null'); if(s){for(const k of ['gaya','tinta','tema','kertas'])if(s[k])state[k]=s[k];}}catch(e){}
 
 /* ---------- Terbilang (Indonesia) ---------- */
 const SAT=['','satu','dua','tiga','empat','lima','enam','tujuh','delapan','sembilan','sepuluh','sebelas'];
