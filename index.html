@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Buat kuitansi pembayaran dan unduh sebagai PDF.">
+<title>Kuitansi Online</title>
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Libre+Baskerville:ital,wght@0,400;1,400&family=Courier+Prime:wght@400;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: form panel on the left, live receipt preview pinned on the right; stacks with the preview first on phones */
+:root{
+  --bg:#eef4f7; --surface:#ffffff; --fg:#13222e; --muted:#5a6c79; --line:#d3e0e7;
+  --accent:#1c6b97; --accent-fg:#ffffff; --accent-soft:#dcecf5; --ok:#1d7a4f; --warn:#a4561a;
+  --ui:"Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --serif:"Libre Baskerville",Georgia,"Times New Roman",serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e161c; --surface:#16212a; --fg:#e2ecf1; --muted:#93a6b3; --line:#27363f;
+  --accent:#6db4dc; --accent-fg:#06202f; --accent-soft:#1b3342; --ok:#5cc596; --warn:#e7a46b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e161c; --surface:#16212a; --fg:#e2ecf1; --muted:#93a6b3; --line:#27363f;
+  --accent:#6db4dc; --accent-fg:#06202f; --accent-soft:#1b3342; --ok:#5cc596; --warn:#e7a46b; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--ui);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 40px}
+.wrap{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+header{display:flex;flex-direction:column;gap:4px}
+h1{font-family:var(--serif);font-style:italic;font-weight:400;font-size:clamp(26px,4vw,34px);margin:0;text-wrap:balance}
+header p{margin:0;color:var(--muted);max-width:65ch}
+.grid{display:grid;grid-template-columns:minmax(300px,390px) minmax(0,1fr);gap:24px;align-items:start}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:14px}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+label,.lbl{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+input,textarea,select{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 11px;width:100%;min-width:0}
+textarea{resize:vertical;min-height:72px}
+input:focus,textarea:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input[readonly]{opacity:.8}
+.rp{position:relative}
+.rp span{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-weight:600}
+.rp input{padding-left:38px;font-variant-numeric:tabular-nums;font-weight:600}
+.check{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:500}
+.check input{width:auto}
+.hint{font-size:12px;color:var(--muted)}
+.preview{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px);display:flex;flex-direction:column;gap:14px;min-width:0}
+.sheet{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px}
+canvas{display:block;width:100%;height:auto;max-width:100%;border-radius:3px;box-shadow:0 1px 2px rgba(10,40,60,.12),0 8px 24px rgba(10,40,60,.10)}
+.tag{align-self:flex-start;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent);padding:3px 10px;border-radius:99px}
+.actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+button{font:inherit;font-weight:600;border-radius:8px;padding:10px 16px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);padding:11px 20px}
+button:hover{filter:brightness(1.06)}
+.status{font-size:13px;min-height:1.4em}
+.status.ok{color:var(--ok)} .status.warn{color:var(--warn)}
+.sig{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.sig input[type=file]{flex:1 1 180px;padding:7px}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{flex:1;border:0;border-radius:0;padding:8px 10px;font-size:13px;background:var(--bg);color:var(--muted)}
+.seg button.on{background:var(--accent);color:var(--accent-fg)}
+.padwrap{position:relative}
+#pad{display:block;width:100%;height:auto;aspect-ratio:3/1;background:#f7fbfd;border:1px dashed var(--line);border-radius:8px;box-shadow:none;touch-action:none;cursor:crosshair}
+.padhint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#8aa0ad;font-size:13px;pointer-events:none;text-align:center;padding:8px}
+@media (max-width:860px){.grid{grid-template-columns:1fr}.preview{position:static;order:-1}}
+@media (max-width:420px){.row{grid-template-columns:1fr}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Pembuat Kwitansi</h1>
+    <p>Isi formulir, kwitansi langsung terisi di pratinjau. Angka di kolom Rp otomatis diubah menjadi terbilang.</p>
+  </header>
+
+  <div class="grid">
+    <form class="panel" id="form" autocomplete="off">
+      <div class="field"><label for="no">No.</label><input id="no" data-k="no"></div>
+      <div class="field"><label for="dari">Telah terima dari</label><input id="dari" data-k="dari"></div>
+      <div class="field"><label for="jumlah">Jumlah (Rp.)</label>
+        <div class="rp"><span>Rp</span><input id="jumlah" inputmode="numeric" data-k="jumlah"></div></div>
+      <div class="field"><label for="terbilang">Uang sejumlah</label>
+        <textarea id="terbilang" data-k="terbilang" rows="2"></textarea>
+        <label class="check"><input type="checkbox" id="auto" checked> Isi otomatis dari jumlah Rp</label></div>
+      <div class="field"><label for="untuk">Untuk pembayaran</label><textarea id="untuk" data-k="untuk" rows="3"></textarea></div>
+      <div class="row">
+        <div class="field"><label for="kota">Kota</label><input id="kota" data-k="kota"></div>
+        <div class="field"><label for="tanggal">Tanggal</label><input id="tanggal" type="date" data-k="tanggal"></div>
+      </div>
+      <div class="field"><label for="penerima">Nama penerima</label><input id="penerima" data-k="penerima"></div>
+      <div class="field"><span class="lbl">Tanda tangan / stempel (opsional)</span>
+        <div class="seg" role="tablist"><button type="button" id="modeTulis" class="on" aria-pressed="true">Tulis manual</button><button type="button" id="modeUnggah" aria-pressed="false">Unggah gambar</button></div>
+        <div id="panelTulis" class="padwrap"><canvas id="pad" width="900" height="300" aria-label="Area tanda tangan"></canvas><span class="padhint" id="padHint">Tanda tangan di sini dengan jari atau mouse</span></div>
+        <div id="panelUnggah" class="sig" hidden><input type="file" id="ttd" accept="image/*" aria-label="Gambar tanda tangan"></div>
+        <div class="sig"><button type="button" id="hapusTtd">Hapus tanda tangan</button><span class="hint" id="ttdHint">Tanda tangan langsung muncul di kwitansi.</span></div></div>
+      <div class="row">
+        <div class="field"><label for="gaya">Gaya tulisan</label>
+          <select id="gaya" data-k="gaya"><option value="tangan">Tulisan tangan</option><option value="cetak">Ketik / cetak</option></select></div>
+        <div class="field"><label for="kertas">Ukuran PDF</label>
+          <select id="kertas" data-k="kertas"><option value="kwitansi">Kwitansi 21 × 8 cm</option><option value="a4">A4 (cetak di atas)</option></select></div>
+      </div>
+      <div class="actions"><button type="button" id="contoh">Isi contoh</button><button type="button" id="kosong">Kosongkan</button></div>
+    </form>
+
+    <section class="preview">
+      <div class="sheet">
+        <span class="tag" id="tag">Data contoh, ganti dengan isian Anda</span>
+        <canvas id="cv" width="2400" height="912" aria-label="Pratinjau kwitansi"></canvas>
+      </div>
+      <div class="actions">
+        <button type="button" class="primary" id="unduh">Unduh PDF</button>
+        <span class="status" id="status" role="status"></span>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+(function(){
+const W=2400,H=912;
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+const KEY='kwitansi-draft-v1';
+const CONTOH={no:'001/KW/XI/2026',dari:'Bapak Ahmad Fauzi',jumlah:'1250000',terbilang:'',untuk:'Sewa ruko bulan November 2026 di Jl. Melati No. 12, Jakarta Selatan',kota:'Jakarta',tanggal:'2026-11-07',penerima:'Siti Rahmawati',gaya:'tangan',kertas:'kwitansi',auto:true};
+const KOSONG={no:'',dari:'',jumlah:'',terbilang:'',untuk:'',kota:'',tanggal:'',penerima:'',gaya:'tangan',kertas:'kwitansi',auto:true};
+let state, isContoh=true, ttdImg=null;
+
+try{const s=JSON.parse(localStorage.getItem(KEY)||'null'); if(s){state=Object.assign({},KOSONG,s); isContoh=!!s._contoh;}}catch(e){}
+if(!state){state=Object.assign({},CONTOH); isContoh=true;}
+
+/* ---------- Terbilang (Indonesia) ---------- */
+const SAT=['','satu','dua','tiga','empat','lima','enam','tujuh','delapan','sembilan','sepuluh','sebelas'];
+function tb(n){
+  if(n<12) return SAT[n];
+  if(n<20) return tb(n-10)+' belas';
+  if(n<100) return tb(Math.floor(n/10))+' puluh '+tb(n%10);
+  if(n<200) return 'seratus '+tb(n-100);
+  if(n<1000) return tb(Math.floor(n/100))+' ratus '+tb(n%100);
+  if(n<2000) return 'seribu '+tb(n-1000);
+  if(n<1e6) return tb(Math.floor(n/1000))+' ribu '+tb(n%1000);
+  if(n<1e9) return tb(Math.floor(n/1e6))+' juta '+tb(n%1e6);
+  if(n<1e12) return tb(Math.floor(n/1e9))+' miliar '+tb(n%1e9);
+  return tb(Math.floor(n/1e12))+' triliun '+tb(n%1e12);
+}
+function terbilang(n){
+  if(!n) return '';
+  const s=tb(n).replace(/\s+/g,' ').trim();
+  return s.replace(/\b\w/g,c=>c.toUpperCase())+' Rupiah';
+}
+const fmt=n=>n?Number(n).toLocaleString('id-ID'):'';
+const BULAN=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+function tglTeks(){
+  let d='';
+  if(state.tanggal){const [y,m,dd]=state.tanggal.split('-').map(Number); if(y&&m&&dd) d=dd+' '+BULAN[m-1]+' '+y;}
+  return [state.kota.trim(),d].filter(Boolean).join(', ');
+}
+
+/* ---------- Security-paper background (drawn once) ---------- */
+function rosette(c,cx,cy,rx,ry,n,color,lw,rot=0){
+  c.strokeStyle=color;c.lineWidth=lw;
+  for(let i=0;i<n;i++){c.save();c.translate(cx,cy);c.rotate(rot+i*Math.PI/n);c.beginPath();c.ellipse(0,0,rx,ry,0,0,Math.PI*2);c.stroke();c.restore();}
+}
+function mesh(c,x0,y0,x1,y1){
+  for(let y=y0-10;y<y1+10;y+=9){
+    for(const [ph,col] of [[0,'rgba(255,255,255,.55)'],[Math.PI,'rgba(60,130,180,.30)']]){
+      c.beginPath();
+      for(let x=x0;x<=x1;x+=10){const yy=y+4*Math.sin(x/34+y/46+ph); x===x0?c.moveTo(x,yy):c.lineTo(x,yy);}
+      c.strokeStyle=col;c.lineWidth=1.4;c.stroke();
+    }
+  }
+}
+const bg=document.createElement('canvas'); bg.width=W; bg.height=H;
+(function drawBg(){
+  const c=bg.getContext('2d');
+  c.fillStyle='#ffffff';c.fillRect(0,0,W,H);
+  // stub
+  const S={x:14,y:14,w:400,h:H-28};
+  c.save();c.beginPath();c.rect(S.x,S.y,S.w,S.h);c.clip();
+  c.fillStyle='#b8dbed';c.fillRect(S.x,S.y,S.w,S.h);mesh(c,S.x,S.y,S.x+S.w,S.y+S.h);
+  c.fillStyle='rgba(225,241,249,.75)';c.beginPath();c.ellipse(214,456,135,330,0,0,Math.PI*2);c.fill();
+  c.save();c.beginPath();c.ellipse(214,456,135,330,0,0,Math.PI*2);c.clip();
+  for(let i=0;i<40;i++){const a=i/40*Math.PI*2;c.beginPath();c.ellipse(214+Math.cos(a)*60,456+Math.sin(a)*150,80,190,0,0,Math.PI*2);c.strokeStyle='rgba(90,160,205,.35)';c.lineWidth=1.2;c.stroke();}
+  c.restore();
+  rosette(c,214,456,95,30,36,'rgba(70,145,195,.45)',1.2);
+  const g=c.createRadialGradient(214,456,0,214,456,48);g.addColorStop(0,'#7cc3e3');g.addColorStop(1,'rgba(124,195,227,0)');c.fillStyle=g;c.beginPath();c.arc(214,456,48,0,Math.PI*2);c.fill();
+  c.restore();
+  // stub border
+  c.strokeStyle='#3b3552';c.lineWidth=3;c.strokeRect(S.x+10,S.y+10,S.w-20,S.h-20);
+  c.setLineDash([3,6]);c.lineWidth=7;c.strokeRect(S.x+19,S.y+19,S.w-38,S.h-38);c.setLineDash([]);
+  c.lineWidth=1.5;c.strokeRect(S.x+28,S.y+28,S.w-56,S.h-56);
+  // perforation
+  c.setLineDash([2,10]);c.strokeStyle='#9aa9b4';c.lineWidth=3;c.beginPath();c.moveTo(427,10);c.lineTo(427,H-10);c.stroke();c.setLineDash([]);
+  // main
+  const M={x:440,y:14,w:W-454,h:H-28};
+  c.save();c.beginPath();c.rect(M.x,M.y,M.w,M.h);c.clip();
+  c.fillStyle='#b8dbed';c.fillRect(M.x,M.y,M.w,M.h);mesh(c,M.x,M.y,M.x+M.w,M.y+M.h);
+  const cx=1450,cy=410;
+  c.fillStyle='rgba(222,239,248,.78)';c.beginPath();c.ellipse(cx,cy,770,335,0,0,Math.PI*2);c.fill();
+  c.save();c.beginPath();c.ellipse(cx,cy,770,335,0,0,Math.PI*2);c.clip();
+  for(let i=0;i<96;i++){const a=i/96*Math.PI*2;c.beginPath();c.ellipse(cx+Math.cos(a)*340,cy+Math.sin(a)*150,380,170,0,0,Math.PI*2);c.strokeStyle='rgba(255,255,255,.75)';c.lineWidth=1.3;c.stroke();}
+  for(let i=0;i<60;i++){const a=i/60*Math.PI*2;c.beginPath();c.ellipse(cx+Math.cos(a)*120,cy+Math.sin(a)*60,200,95,0,0,Math.PI*2);c.strokeStyle='rgba(95,160,205,.28)';c.lineWidth=1.1;c.stroke();}
+  c.restore();
+  c.strokeStyle='rgba(90,150,195,.45)';c.lineWidth=2;c.beginPath();c.ellipse(cx,cy,770,335,0,0,Math.PI*2);c.stroke();
+  rosette(c,cx,cy,170,50,48,'rgba(70,145,195,.4)',1.2);
+  let g2=c.createRadialGradient(cx,cy,0,cx,cy,70);g2.addColorStop(0,'#78c1e2');g2.addColorStop(1,'rgba(120,193,226,0)');c.fillStyle=g2;c.beginPath();c.arc(cx,cy,70,0,Math.PI*2);c.fill();
+  // right medallion
+  const rx=2200,ry=410;
+  c.fillStyle='rgba(222,239,248,.6)';c.beginPath();c.arc(rx,ry,150,0,Math.PI*2);c.fill();
+  rosette(c,rx,ry,140,44,40,'rgba(255,255,255,.75)',1.2);
+  rosette(c,rx,ry,90,26,30,'rgba(70,145,195,.4)',1.1,.05);
+  g2=c.createRadialGradient(rx,ry,0,rx,ry,45);g2.addColorStop(0,'#78c1e2');g2.addColorStop(1,'rgba(120,193,226,0)');c.fillStyle=g2;c.beginPath();c.arc(rx,ry,45,0,Math.PI*2);c.fill();
+  c.restore();
+  c.strokeStyle='rgba(60,115,160,.55)';c.lineWidth=2;c.strokeRect(M.x,M.y,M.w,M.h);
+})();
+
+/* ---------- Text helpers ---------- */
+const LABEL='#1b2840', INK='#0d1f5c', LINE='#2b3550';
+function vfont(size){return state.gaya==='cetak'?`700 ${Math.round(size*.82)}px "Courier Prime", "Courier New", monospace`:`400 ${size}px Kalam, "Comic Sans MS", cursive`;}
+function vfontB(size){return state.gaya==='cetak'?`700 ${Math.round(size*.82)}px "Courier Prime", "Courier New", monospace`:`700 ${size}px Kalam, "Comic Sans MS", cursive`;}
+function fit(text,maxW,size,min,f=vfont){let s=size;ctx.font=f(s);while(s>min&&ctx.measureText(text).width>maxW){s-=1;ctx.font=f(s);}return s;}
+function label(t,x,y,s=40){ctx.font=`italic ${s}px "Libre Baskerville", Georgia, serif`;ctx.fillStyle=LABEL;ctx.fillText(t,x,y);}
+function hline(x0,x1,y){ctx.strokeStyle=LINE;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x0,y);ctx.lineTo(x1,y);ctx.stroke();}
+function band(pts){
+  ctx.save();ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();
+  ctx.fillStyle='rgba(150,190,214,.55)';ctx.fill();ctx.clip();
+  const ys=pts.map(p=>p[1]),xs=pts.map(p=>p[0]);const t=Math.min(...ys),b=Math.max(...ys);
+  ctx.strokeStyle='rgba(38,52,88,.62)';ctx.lineWidth=2.4;
+  for(let x=Math.min(...xs)-120;x<Math.max(...xs)+120;x+=9){ctx.beginPath();ctx.moveTo(x,t);ctx.lineTo(x-45,b);ctx.stroke();}
+  ctx.restore();
+  ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();ctx.strokeStyle='rgba(38,52,88,.85)';ctx.lineWidth=2;ctx.stroke();
+}
+function ink(t,x,y,halo){
+  if(halo){ctx.lineJoin='round';ctx.strokeStyle='rgba(232,244,250,.92)';ctx.lineWidth=11;ctx.strokeText(t,x,y);}
+  ctx.fillStyle=INK;ctx.fillText(t,x,y);
+}
+function wrap(text,widths,f){
+  const words=text.split(/\s+/).filter(Boolean),lines=[];let cur='',li=0;
+  for(const w of words){const t=cur?cur+' '+w:w;ctx.font=f;
+    if(ctx.measureText(t).width<=widths[Math.min(li,widths.length-1)]||!cur){cur=t;}else{lines.push(cur);li++;cur=w;}}
+  if(cur)lines.push(cur);return lines;
+}
+
+/* ---------- Render ---------- */
+function render(){
+  ctx.clearRect(0,0,W,H);ctx.drawImage(bg,0,0);ctx.textBaseline='alphabetic';
+  // No.
+  label('No.',520,128);hline(600,990,138);
+  if(state.no){const s=fit(state.no,380,46,26);ctx.font=vfont(s);ink(state.no,612,126);}
+  // Telah terima dari
+  label('Telah terima dari',520,212);hline(970,2320,220);
+  if(state.dari){const s=fit(state.dari,1340,50,28);ctx.font=vfont(s);ink(state.dari,985,208);}
+  // Uang sejumlah
+  label('Uang sejumlah',520,306);
+  band([[950,262],[2330,262],[2302,340],[922,340]]);
+  const tbText=(state.auto?terbilang(Number(state.jumlah)||0):state.terbilang).trim();
+  if(tbText){
+    const one=fit(tbText,1340,46,32);
+    if(ctx.measureText(tbText).width<=1340){ctx.font=vfont(one);ink(tbText,972,314,true);}
+    else{let s=34,ls;do{ls=wrap(tbText,[1340],vfont(s));if(ls.length<=2)break;s--;}while(s>20);
+      ctx.font=vfont(s);ink(ls[0],972,296,true);if(ls[1])ink(ls.slice(1).join(' '),958,332,true);}
+  }
+  // Untuk pembayaran
+  label('Untuk pembayaran',520,406);
+  const Ls=[[1010,2320,414],[920,2320,494],[920,2320,574]];Ls.forEach(l=>hline(...l));
+  if(state.untuk.trim()){
+    let s=46,lines;const widths=[1290,1380,1380];
+    do{lines=wrap(state.untuk.trim(),widths,vfont(s));if(lines.length<=3)break;s--;}while(s>26);
+    ctx.font=vfont(s);lines.slice(0,3).forEach((t,i)=>ink(t,Ls[i][0]+14,Ls[i][2]-10));
+  }
+  // Tempat & tanggal
+  hline(1560,2320,652);
+  const tg=tglTeks();
+  if(tg){const s=fit(tg,740,42,26);ctx.font=vfont(s);ink(tg,1576,640);}
+  // Penerima
+  const cxs=1940;
+  ctx.textAlign='center';label('Yang menerima,',cxs,706,32);ctx.textAlign='left';
+  if(ttdImg){const bw=420,bh=118;const r=Math.min(bw/ttdImg.width,bh/ttdImg.height);const w=ttdImg.width*r,h=ttdImg.height*r;ctx.drawImage(ttdImg,cxs-w/2,722+(bh-h)/2,w,h);}
+  ctx.strokeStyle=LINE;ctx.lineWidth=2;ctx.setLineDash([]);hline(1720,2160,872);
+  if(state.penerima){const s=fit(state.penerima,430,40,24);ctx.font=vfont(s);ctx.textAlign='center';ink(state.penerima,cxs,862);ctx.textAlign='left';}
+  // Rp
+  label('Rp.',520,770);
+  band([[650,718],[1230,718],[1202,790],[622,790]]);
+  if(state.jumlah){const t=fmt(state.jumlah)+',-';const s=fit(t,540,58,30,vfontB);ctx.font=vfontB(s);ink(t,668,773,true);}
+  // Stub notes
+  ctx.font='600 24px "Plus Jakarta Sans", sans-serif';ctx.fillStyle=LABEL;
+  if(state.no){ctx.save();ctx.translate(214,110);ctx.textAlign='center';ctx.fillText(trunc(state.no,22),0,0);ctx.restore();}
+  if(state.jumlah){ctx.save();ctx.textAlign='center';ctx.fillText('Rp '+fmt(state.jumlah),214,H-92);ctx.restore();}
+  ctx.textAlign='left';
+}
+function trunc(t,n){return t.length>n?t.slice(0,n-1)+'…':t;}
+let raf=0;function schedule(){cancelAnimationFrame(raf);raf=requestAnimationFrame(render);}
+
+/* ---------- Form binding ---------- */
+function syncForm(){
+  document.querySelectorAll('[data-k]').forEach(el=>{const k=el.dataset.k;
+    el.value=k==='jumlah'?fmt(state.jumlah):(state[k]||'');});
+  $('auto').checked=state.auto;
+  $('terbilang').readOnly=state.auto;
+  if(state.auto)$('terbilang').value=terbilang(Number(state.jumlah)||0);
+  $('tag').hidden=!isContoh;
+}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(Object.assign({},state,{_contoh:isContoh})));}catch(e){}}
+document.querySelectorAll('[data-k]').forEach(el=>{
+  el.addEventListener('input',()=>{
+    const k=el.dataset.k;
+    if(k==='jumlah'){
+      const digits=el.value.replace(/\D/g,'').replace(/^0+/,'').slice(0,15);
+      state.jumlah=digits;const pos=el.value.length-el.selectionStart;
+      el.value=fmt(digits);try{const p=Math.max(0,el.value.length-pos);el.setSelectionRange(p,p);}catch(e){}
+      if(state.auto)$('terbilang').value=terbilang(Number(digits)||0);
+    }else state[k]=el.value;
+    if(isContoh){isContoh=false;$('tag').hidden=true;}
+    save();schedule();
+  });
+});
+$('auto').addEventListener('change',e=>{
+  state.auto=e.target.checked;
+  if(!state.auto&&!state.terbilang)state.terbilang=terbilang(Number(state.jumlah)||0);
+  syncForm();save();schedule();
+});
+$('contoh').addEventListener('click',()=>{state=Object.assign({},CONTOH);isContoh=true;syncForm();save();schedule();setStatus('');});
+$('kosong').addEventListener('click',()=>{state=Object.assign({},KOSONG,{gaya:state.gaya,kertas:state.kertas});isContoh=false;ttdImg=null;$('ttd').value='';clearPad();syncForm();save();schedule();setStatus('');});
+$('ttd').addEventListener('change',e=>{
+  const f=e.target.files&&e.target.files[0];if(!f)return;
+  const rd=new FileReader();rd.onload=()=>{const im=new Image();im.onload=()=>{ttdImg=im;schedule();};im.src=rd.result;};rd.readAsDataURL(f);
+});
+/* Signature pad */
+const pad=$('pad'),pc=pad.getContext('2d');let drawing=false,last=null,box=null;
+function clearPad(){pc.clearRect(0,0,pad.width,pad.height);box=null;$('padHint').hidden=false;}
+function pt(e){const r=pad.getBoundingClientRect();return{x:(e.clientX-r.left)*pad.width/r.width,y:(e.clientY-r.top)*pad.height/r.height};}
+function grow(p){const m=8;if(!box)box={x0:p.x,y0:p.y,x1:p.x,y1:p.y};box.x0=Math.min(box.x0,p.x-m);box.y0=Math.min(box.y0,p.y-m);box.x1=Math.max(box.x1,p.x+m);box.y1=Math.max(box.y1,p.y+m);}
+pad.addEventListener('pointerdown',e=>{e.preventDefault();try{pad.setPointerCapture(e.pointerId);}catch(_){}drawing=true;last=pt(e);grow(last);$('padHint').hidden=true;
+  pc.fillStyle=INK;pc.beginPath();pc.arc(last.x,last.y,2.4,0,Math.PI*2);pc.fill();});
+pad.addEventListener('pointermove',e=>{if(!drawing)return;e.preventDefault();const p=pt(e);
+  pc.strokeStyle=INK;pc.lineWidth=e.pointerType==='pen'&&e.pressure?3+e.pressure*4:5;pc.lineCap='round';pc.lineJoin='round';
+  pc.beginPath();pc.moveTo(last.x,last.y);const mx=(last.x+p.x)/2,my=(last.y+p.y)/2;pc.quadraticCurveTo(last.x,last.y,mx,my);pc.lineTo(p.x,p.y);pc.stroke();last=p;grow(p);});
+function endStroke(){if(!drawing)return;drawing=false;if(!box)return;
+  const x0=Math.max(0,box.x0|0),y0=Math.max(0,box.y0|0),x1=Math.min(pad.width,Math.ceil(box.x1)),y1=Math.min(pad.height,Math.ceil(box.y1));
+  const c=document.createElement('canvas');c.width=Math.max(1,x1-x0);c.height=Math.max(1,y1-y0);c.getContext('2d').drawImage(pad,x0,y0,c.width,c.height,0,0,c.width,c.height);
+  ttdImg=c;schedule();}
+pad.addEventListener('pointerup',endStroke);pad.addEventListener('pointercancel',endStroke);pad.addEventListener('pointerleave',endStroke);
+function setMode(m){const tulis=m==='tulis';$('modeTulis').classList.toggle('on',tulis);$('modeUnggah').classList.toggle('on',!tulis);
+  $('modeTulis').setAttribute('aria-pressed',tulis);$('modeUnggah').setAttribute('aria-pressed',!tulis);
+  $('panelTulis').hidden=!tulis;$('panelUnggah').hidden=tulis;}
+$('modeTulis').addEventListener('click',()=>setMode('tulis'));
+$('modeUnggah').addEventListener('click',()=>setMode('unggah'));
+$('hapusTtd').addEventListener('click',()=>{ttdImg=null;$('ttd').value='';clearPad();schedule();});
+
+/* ---------- PDF ---------- */
+function setStatus(t,cls){const s=$('status');s.textContent=t;s.className='status'+(cls?' '+cls:'');}
+const dlP=(window.claude&&window.claude.use)?window.claude.use('downloads').catch(()=>null):Promise.resolve(null);
+$('unduh').addEventListener('click',async()=>{
+  render();
+  if(!window.jspdf){setStatus('Pustaka PDF belum termuat. Periksa koneksi lalu coba lagi.','warn');return;}
+  const {jsPDF}=window.jspdf;let doc;
+  const img=cv.toDataURL('image/jpeg',0.93);
+  if(state.kertas==='a4'){
+    doc=new jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
+    doc.addImage(img,'JPEG',10,12,190,190*H/W);
+    doc.setLineDashPattern([1.5,1.5],0);doc.setDrawColor(150);doc.line(5,12+190*H/W+6,205,12+190*H/W+6);
+  }else{
+    doc=new jsPDF({unit:'mm',format:[210,80],orientation:'landscape'});
+    doc.addImage(img,'JPEG',0,0,210,80);
+  }
+  doc.setProperties({title:'Kwitansi '+(state.no||''),subject:'Kwitansi pembayaran'});
+  const name='Kwitansi-'+((state.no||'baru').replace(/[^\w-]+/g,'-').replace(/^-+|-+$/g,'')||'baru')+'.pdf';
+  if(!window.claude){try{doc.save(name);setStatus('PDF diunduh: '+name,'ok');}catch(e){setStatus('PDF gagal dibuat. Coba lagi.','warn');}return;}
+  const dl=await dlP;
+  if(!dl){setStatus('Unduhan tidak tersedia di tampilan ini. Buka halaman ini di claude.ai untuk mengunduh.','warn');return;}
+  try{await dl.save({filename:name,data:doc.output('blob')});setStatus('PDF disimpan: '+name,'ok');}
+  catch(e){const c=e&&e.code;
+    setStatus(c==='declined'?'Unduhan dibatalkan.':c==='rate_limited'?'Tunggu sebentar, lalu coba lagi.':'PDF tidak bisa diunduh di tampilan ini.','warn');}
+});
+
+/* ---------- Init ---------- */
+syncForm();render();
+const fl=['italic 40px "Libre Baskerville"','400 46px Kalam','700 46px Kalam','700 40px "Courier Prime"','600 24px "Plus Jakarta Sans"'];
+if(document.fonts){Promise.all(fl.map(f=>document.fonts.load(f).catch(()=>{}))).then(render);document.fonts.addEventListener&&document.fonts.addEventListener('loadingdone',schedule);}
+})();
+</script>
+
+</body>
+</html>
