@@ -56,6 +56,7 @@ button{font:inherit;font-weight:600;border-radius:8px;padding:10px 16px;cursor:p
 button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);padding:11px 20px}
 button:hover{filter:brightness(1.06)}
 .status{font-size:13px;min-height:1.4em}
+#bukaPdf{color:var(--accent);text-decoration:underline;font-size:13px}
 .status.ok{color:var(--ok)} .status.warn{color:var(--warn)}
 .sig{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .sig input[type=file]{flex:1 1 180px;padding:7px}
@@ -120,6 +121,8 @@ button:hover{filter:brightness(1.06)}
       </div>
       <div class="actions">
         <button type="button" class="primary" id="unduh">Unduh PDF</button>
+        <button type="button" id="bagikan" hidden>Simpan ke File / Bagikan</button>
+        <a id="bukaPdf" class="hint" href="#" target="_blank" rel="noopener" hidden>Belum terunduh? Buka PDF-nya di sini</a>
         <span class="status" id="status" role="status"></span>
       </div>
     </section>
@@ -401,9 +404,9 @@ $('hapusTtd').addEventListener('click',()=>{ttdImg=null;$('ttd').value='';clearP
 /* ---------- PDF ---------- */
 function setStatus(t,cls){const s=$('status');s.textContent=t;s.className='status'+(cls?' '+cls:'');}
 const dlP=(window.claude&&window.claude.use)?window.claude.use('downloads').catch(()=>null):Promise.resolve(null);
-$('unduh').addEventListener('click',async()=>{
+function buildPdf(){
   render();
-  if(!window.jspdf){setStatus('Pustaka PDF belum termuat. Periksa koneksi lalu coba lagi.','warn');return;}
+  if(!window.jspdf)return null;
   const {jsPDF}=window.jspdf;let doc;
   const img=cv.toDataURL('image/jpeg',0.93);
   if(state.kertas==='a4'){
@@ -416,10 +419,34 @@ $('unduh').addEventListener('click',async()=>{
   }
   doc.setProperties({title:'Kwitansi '+(state.no||''),subject:'Kwitansi pembayaran'});
   const name='Kwitansi-'+((state.no||'baru').replace(/[^\w-]+/g,'-').replace(/^-+|-+$/g,'')||'baru')+'.pdf';
-  if(!window.claude){try{doc.save(name);setStatus('PDF diunduh: '+name,'ok');}catch(e){setStatus('PDF gagal dibuat. Coba lagi.','warn');}return;}
+  return {blob:new Blob([doc.output('arraybuffer')],{type:'application/pdf'}),name};
+}
+let lastUrl=null;
+function directDownload(blob,name){
+  if(lastUrl)URL.revokeObjectURL(lastUrl);
+  const url=lastUrl=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=name;a.rel='noopener';a.style.display='none';
+  document.body.appendChild(a);a.click();a.remove();
+  const fb=$('bukaPdf');fb.href=url;fb.hidden=false;
+}
+const isClaude=!!window.claude;
+if(!isClaude&&navigator.canShare){try{if(navigator.canShare({files:[new File(['x'],'t.pdf',{type:'application/pdf'})]}))$('bagikan').hidden=false;}catch(e){}}
+$('bagikan').addEventListener('click',async()=>{
+  const r=buildPdf();if(!r){setStatus('Pustaka PDF belum termuat. Periksa koneksi lalu coba lagi.','warn');return;}
+  try{await navigator.share({files:[new File([r.blob],r.name,{type:'application/pdf'})],title:r.name});setStatus('PDF dibagikan: '+r.name,'ok');}
+  catch(e){if(e&&e.name!=='AbortError')setStatus('Tidak bisa membagikan. Pakai tombol Unduh PDF.','warn');}
+});
+$('unduh').addEventListener('click',async()=>{
+  const r=buildPdf();
+  if(!r){setStatus('Pustaka PDF belum termuat. Periksa koneksi lalu coba lagi.','warn');return;}
+  if(!isClaude){
+    try{directDownload(r.blob,r.name);setStatus('PDF diunduh: '+r.name+'. Cek folder Unduhan / Downloads.','ok');}
+    catch(e){setStatus('PDF gagal diunduh. Coba lagi.','warn');}
+    return;
+  }
   const dl=await dlP;
-  if(!dl){setStatus('Unduhan tidak tersedia di tampilan ini. Buka halaman ini di claude.ai untuk mengunduh.','warn');return;}
-  try{await dl.save({filename:name,data:doc.output('blob')});setStatus('PDF disimpan: '+name,'ok');}
+  if(!dl){setStatus('Unduhan tidak tersedia di tampilan ini. Buka nhfery.github.io untuk mengunduh langsung.','warn');return;}
+  try{await dl.save({filename:r.name,data:r.blob});setStatus('PDF disimpan: '+r.name,'ok');}
   catch(e){const c=e&&e.code;
     setStatus(c==='declined'?'Unduhan dibatalkan.':c==='rate_limited'?'Tunggu sebentar, lalu coba lagi.':'PDF tidak bisa diunduh di tampilan ini.','warn');}
 });
